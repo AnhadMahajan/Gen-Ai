@@ -1,4 +1,4 @@
-# AI-Resume-Analyzer  https://github.com/AnhadMahajan/Gen-Ai/blob/main/Image%20Captioner/requirements.txt
+# AI-Resume-Analyzer  https://gen-ai-4o3gaofkmdp2dv8xxvj3y6.streamlit.app/
 ## Table of Contents
 - [Overview](#overview)
 - [Features](#features)
