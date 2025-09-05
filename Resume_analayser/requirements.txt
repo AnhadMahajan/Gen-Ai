@@ -1,0 +1,11 @@
+streamlit
+python-dotenv
+Pillow
+google-generativeai
+pdf2image
+pytesseract
+pdfplumber
+plotly
+wordcloud
+matplotlib
+pandas
