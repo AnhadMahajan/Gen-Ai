@@ -23,17 +23,6 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-try:
-    api_key = os.getenv("GOOGLE_API_KEY")
-    if not api_key:
-        st.error("❌ GOOGLE_API_KEY not found in environment variables!")
-        st.stop()
-    genai.configure(api_key=api_key)
-    logger.info("✅ Google API configured successfully")
-except Exception as e:
-    st.error(f"❌ Failed to configure Google API: {e}")
-    st.stop()
-
 st.set_page_config(
     page_title="AI Resume Analyzer Pro",
     page_icon="📊",
@@ -47,7 +36,6 @@ st.markdown("""
     
     * {
         font-family: 'Inter', sans-serif;
-
     }
     
     .main-header {
@@ -75,7 +63,7 @@ st.markdown("""
     }
     
     .feature-card {
-        background: grey;
+        background: white;
         padding: 1.5rem;
         border-radius: 12px;
         box-shadow: 0 4px 15px rgba(0,0,0,0.1);
@@ -106,10 +94,11 @@ st.markdown("""
         border-radius: 12px;
         box-shadow: 0 4px 15px rgba(0,0,0,0.08);
         margin: 1rem 0;
+        color: white;
     }
     
     .error-card {
-        background: grey;
+        background: #fed7d7;
         border: 1px solid #fed7d7;
         border-radius: 12px;
         padding: 1rem;
@@ -118,12 +107,21 @@ st.markdown("""
     }
     
     .success-card {
-        background: grey;
+        background: #c6f6d5;
         border: 1px solid #9ae6b4;
         border-radius: 12px;
         padding: 1rem;
         margin: 1rem 0;
         color: #22543d;
+    }
+    
+    .warning-card {
+        background: #ffeaa7;
+        border: 1px solid #fdcb6e;
+        border-radius: 12px;
+        padding: 1rem;
+        margin: 1rem 0;
+        color: #d63031;
     }
     
     .debug-section {
@@ -174,6 +172,14 @@ st.markdown("""
         transform: translateY(-2px);
         box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
     }
+    
+    .api-key-section {
+        background: #f8f9fa;
+        border: 2px solid #667eea;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin: 1rem 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -192,11 +198,73 @@ if 'analysis_history' not in st.session_state:
     st.session_state.analysis_history = []
 if 'debug_mode' not in st.session_state:
     st.session_state.debug_mode = False
+if 'api_configured' not in st.session_state:
+    st.session_state.api_configured = False
+
+st.markdown("""
+<div class="api-key-section">
+    <h3>🔑 Google Gemini API Configuration</h3>
+    <p>Enter your Google Gemini API key to enable resume analysis</p>
+</div>
+""", unsafe_allow_html=True)
+
+env_api_key = os.getenv("GOOGLE_API_KEY")
+
+api_key_input = st.text_input(
+    "Google Gemini API Key",
+    type="password",
+    value=env_api_key if env_api_key else "",
+    help="Get your API key from https://makersuite.google.com/app/apikey",
+    placeholder="Enter your Google Gemini API key here..."
+)
+
+if api_key_input:
+    try:
+        genai.configure(api_key=api_key_input)
+        st.session_state.api_configured = True
+        st.markdown("""
+        <div class="success-card">
+            <h4>✅ API Key Configured Successfully!</h4>
+            <p>You can now proceed with resume analysis</p>
+        </div>
+        """, unsafe_allow_html=True)
+        logger.info("✅ Google API configured successfully")
+    except Exception as e:
+        st.session_state.api_configured = False
+        st.markdown(f"""
+        <div class="error-card">
+            <h4>❌ API Configuration Failed</h4>
+            <p>Error: {str(e)}</p>
+            <p>Please check your API key and try again</p>
+        </div>
+        """, unsafe_allow_html=True)
+else:
+    st.session_state.api_configured = False
+    st.markdown("""
+    <div class="warning-card">
+        <h4>⚠️ API Key Required</h4>
+        <p>Please enter your Google Gemini API key above to use the resume analyzer</p>
+        <p><strong>How to get an API key:</strong></p>
+        <ol>
+            <li>Visit <a href="https://makersuite.google.com/app/apikey" target="_blank">Google AI Studio</a></li>
+            <li>Sign in with your Google account</li>
+            <li>Click "Create API Key"</li>
+            <li>Copy and paste the key above</li>
+        </ol>
+    </div>
+    """, unsafe_allow_html=True)
 
 with st.sidebar:
     st.markdown("### 🛠️ Settings")
     debug_mode = st.checkbox("Enable Debug Mode", value=st.session_state.debug_mode)
     st.session_state.debug_mode = debug_mode
+    
+    st.markdown("---")
+    
+    if st.session_state.api_configured:
+        st.markdown("🟢 **API Status:** Connected")
+    else:
+        st.markdown("🔴 **API Status:** Not Connected")
     
     st.markdown("---")
     
@@ -230,7 +298,6 @@ def extract_text_from_pdf(pdf_path):
     extraction_methods = []
     
     try:
-
         logger.info("Attempting direct text extraction...")
         with pdfplumber.open(pdf_path) as pdf:
             for page_num, page in enumerate(pdf.pages):
@@ -253,13 +320,11 @@ def extract_text_from_pdf(pdf_path):
             st.warning(f"Direct extraction failed: {e}")
 
     try:
-
         logger.info("Attempting OCR extraction...")
         images = convert_from_path(pdf_path, dpi=300)  
         ocr_text = ""
         
         for i, image in enumerate(images):
-
             image = image.convert('L')  
             page_text = pytesseract.image_to_string(image, config='--psm 6')
             ocr_text += page_text + "\n"
@@ -283,7 +348,6 @@ def validate_resume_text(text):
     if not text or len(text.strip()) < 50:
         return False, "Resume text is too short (less than 50 characters)"
     
-
     common_keywords = ['experience', 'education', 'skills', 'work', 'job', 'project', 'university', 'college', 'degree']
     text_lower = text.lower()
     keyword_count = sum(1 for keyword in common_keywords if keyword in text_lower)
@@ -298,7 +362,6 @@ def analyze_resume_enhanced(resume_text, job_description=None):
     if not resume_text:
         return {"error": "Resume text is required for analysis."}
     
-
     is_valid, validation_message = validate_resume_text(resume_text)
     if not is_valid:
         return {"error": f"Resume validation failed: {validation_message}"}
@@ -306,7 +369,6 @@ def analyze_resume_enhanced(resume_text, job_description=None):
     try:
         model = genai.GenerativeModel("gemini-1.5-flash")
         
-
         enhanced_prompt = f"""
         You are an expert HR professional and career coach with deep expertise across multiple domains including Data Science, AI/ML, Software Development, DevOps, Marketing, and Human Resources.
         
@@ -344,17 +406,14 @@ def analyze_resume_enhanced(resume_text, job_description=None):
             st.markdown("### 🔍 Debug: Raw AI Response")
             st.text_area("Raw Response", response_text, height=200)
         
-
         response_text = response_text.replace('```json', '').replace('```', '').strip()
         
-
         try:
             analysis_result = json.loads(response_text)
             logger.info("✅ JSON parsing successful")
             return analysis_result
         except json.JSONDecodeError as je:
             logger.error(f"JSON parsing failed: {je}")
-
             json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
             if json_match:
                 try:
@@ -376,7 +435,6 @@ def create_skills_chart(skills):
     if not skills:
         return None
     
-
     skills = skills[:15]
     df = pd.DataFrame({'Skills': skills, 'Count': [1] * len(skills)})
     fig = px.bar(df, x='Skills', y='Count', 
@@ -417,278 +475,281 @@ def create_score_gauge(score, title):
     fig.update_layout(height=300, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
     return fig
 
+if st.session_state.api_configured:
+    col1, col2 = st.columns([1, 1])
 
-col1, col2 = st.columns([1, 1])
+    with col1:
+        st.markdown("""
+        <div class="feature-card">
+            <h3>📄 Upload Resume</h3>
+            <p>Upload your resume in PDF format for comprehensive analysis</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        uploaded_file = st.file_uploader(
+            "Choose your resume file",
+            type=["pdf"],
+            help="Upload a PDF file of your resume"
+        )
 
-with col1:
-    st.markdown("""
-    <div class="feature-card">
-        <h3>📄 Upload Resume</h3>
-        <p>Upload your resume in PDF format for comprehensive analysis</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    uploaded_file = st.file_uploader(
-        "Choose your resume file",
-        type=["pdf"],
-        help="Upload a PDF file of your resume"
-    )
+    with col2:
+        st.markdown("""
+        <div class="feature-card">
+            <h3>💼 Job Description (Optional)</h3>
+            <p>Add a job description to get targeted matching insights</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        job_description = st.text_area(
+            "Enter Job Description",
+            height=150,
+            placeholder="Paste the job description here to get personalized matching analysis..."
+        )
 
-with col2:
-    st.markdown("""
-    <div class="feature-card">
-        <h3>💼 Job Description (Optional)</h3>
-        <p>Add a job description to get targeted matching insights</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    job_description = st.text_area(
-        "Enter Job Description",
-        height=150,
-        placeholder="Paste the job description here to get personalized matching analysis..."
-    )
+    if uploaded_file is not None:
+        st.markdown("""
+        <div class="success-card">
+            <h4>✅ Resume uploaded successfully!</h4>
+            <p>File: {}</p>
+            <p>Size: {:.2f} KB</p>
+        </div>
+        """.format(uploaded_file.name, len(uploaded_file.getvalue()) / 1024), unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div class="error-card">
+            <h4>⚠️ Please upload your resume</h4>
+            <p>PDF format required for analysis</p>
+        </div>
+        """, unsafe_allow_html=True)
 
+    if uploaded_file:
+        with open("uploaded_resume.pdf", "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        
+        if st.button("🚀 Analyze Resume", type="primary"):
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            try:
+                status_text.text("📄 Extracting text from PDF...")
+                progress_bar.progress(25)
+                
+                resume_text, extraction_methods = extract_text_from_pdf("uploaded_resume.pdf")
+                st.session_state.resume_text = resume_text
+                
+                if st.session_state.debug_mode:
+                    st.markdown("### 🔍 Debug: Text Extraction")
+                    st.write(f"**Extraction methods used:** {', '.join(extraction_methods)}")
+                    st.write(f"**Text length:** {len(resume_text)} characters")
+                    st.text_area("Extracted Text (first 500 chars)", resume_text[:500], height=150)
+                
+                if not resume_text:
+                    st.error("❌ Failed to extract text from PDF. Please ensure your PDF contains readable text.")
+                    st.stop()
+                
+                status_text.text("🤖 Analyzing with AI...")
+                progress_bar.progress(50)
+                
+                analysis = analyze_resume_enhanced(resume_text, job_description)
+                
+                status_text.text("📊 Creating visualizations...")
+                progress_bar.progress(75)
+                time.sleep(0.5)
+                
+                status_text.text("✅ Analysis complete!")
+                progress_bar.progress(100)
+                time.sleep(0.5)
+                
+                progress_bar.empty()
+                status_text.empty()
+                
+                if "error" not in analysis:
+                    st.session_state.analysis_complete = True
+                    
+                    st.session_state.analysis_history.append({
+                        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        'score': analysis.get('overall_score', 0),
+                        'analysis': analysis
+                    })
+                    
+                    st.markdown("## 📊 Analysis Results")
+                    
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    with col1:
+                        st.markdown(f"""
+                        <div class="metric-card">
+                            <h3>{analysis.get('overall_score', 0)}/100</h3>
+                            <p>Overall Score</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    with col2:
+                        st.markdown(f"""
+                        <div class="metric-card">
+                            <h3>{analysis.get('ats_score', 0)}/100</h3>
+                            <p>ATS Score</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    with col3:
+                        st.markdown(f"""
+                        <div class="metric-card">
+                            <h3>{analysis.get('experience_level', 'Unknown')}</h3>
+                            <p>Experience Level</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    with col4:
+                        score = analysis.get('job_match_score', 0) if job_description else 0
+                        st.markdown(f"""
+                        <div class="metric-card">
+                            <h3>{score}/100</h3>
+                            <p>Job Match</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("""
+                        <div class="analysis-section">
+                            <h3>💪 Strengths</h3>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        for strength in analysis.get('strengths', []):
+                            st.write(f"✅ {strength}")
+                        
+                        st.markdown("""
+                        <div class="analysis-section">
+                            <h3>🎯 Skills Present</h3>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        skills_present = analysis.get('skills_present', [])
+                        if skills_present:
+                            skills_text = ", ".join(skills_present)
+                            st.write(skills_text)
+                            
+                            fig = create_skills_chart(skills_present)
+                            if fig:
+                                st.plotly_chart(fig, use_container_width=True)
+                    
+                    with col2:
+                        st.markdown("""
+                        <div class="analysis-section">
+                            <h3>🔧 Areas for Improvement</h3>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        for weakness in analysis.get('weaknesses', []):
+                            st.write(f"🔄 {weakness}")
+                        
+                        st.markdown("""
+                        <div class="analysis-section">
+                            <h3>📚 Recommended Skills</h3>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        for skill in analysis.get('skills_missing', []):
+                            st.write(f"➕ {skill}")
+                    
+                    st.markdown("## 📈 Score Breakdown")
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        fig1 = create_score_gauge(analysis.get('overall_score', 0), "Overall Score")
+                        st.plotly_chart(fig1, use_container_width=True)
+                    
+                    with col2:
+                        fig2 = create_score_gauge(analysis.get('ats_score', 0), "ATS Compatibility")
+                        st.plotly_chart(fig2, use_container_width=True)
+                    
+                    st.markdown("""
+                    <div class="analysis-section">
+                        <h3>💡 Recommendations</h3>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    for rec in analysis.get('recommendations', []):
+                        st.write(f"🎯 {rec}")
+                    
+                    st.markdown("""
+                    <div class="analysis-section">
+                        <h3>📚 Recommended Courses</h3>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    for course in analysis.get('recommended_courses', []):
+                        st.write(f"📖 {course}")
+                    
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("""
+                        <div class="analysis-section">
+                            <h3>🏭 Industry Fit</h3>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        for industry in analysis.get('industry_fit', []):
+                            st.write(f"🏢 {industry}")
+                    
+                    with col2:
+                        st.markdown("""
+                        <div class="analysis-section">
+                            <h3>💰 Salary Estimate</h3>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        salary = analysis.get('salary_estimate', 'Not available')
+                        st.write(f"💵 {salary}")
+                
+                else:
+                    st.error("❌ Analysis failed. Please see details below:")
+                    
+                    error_msg = analysis.get('error', 'Unknown error')
+                    st.markdown(f"""
+                    <div class="error-card">
+                        <h4>Error Details:</h4>
+                        <p>{error_msg}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    if 'raw_text' in analysis:
+                        with st.expander("🔍 Raw AI Response"):
+                            st.text(analysis['raw_text'])
+                    
+                    if st.session_state.debug_mode and 'traceback' in analysis:
+                        with st.expander("🐛 Technical Details"):
+                            st.text(analysis['traceback'])
+            
+            except Exception as e:
+                st.error(f"❌ Unexpected error occurred: {str(e)}")
+                if st.session_state.debug_mode:
+                    st.text(traceback.format_exc())
 
-if uploaded_file is not None:
-    st.markdown("""
-    <div class="success-card">
-        <h4>✅ Resume uploaded successfully!</h4>
-        <p>File: {}</p>
-        <p>Size: {:.2f} KB</p>
-    </div>
-    """.format(uploaded_file.name, len(uploaded_file.getvalue()) / 1024), unsafe_allow_html=True)
 else:
     st.markdown("""
-    <div class="error-card">
-        <h4>⚠️ Please upload your resume</h4>
-        <p>PDF format required for analysis</p>
+    <div class="feature-card">
+        <h3>🔑 Get Started</h3>
+        <p>Please configure your Google Gemini API key above to start analyzing resumes.</p>
+        <p><strong>Your API key is secure:</strong></p>
+        <ul>
+            <li>✅ Never stored on our servers</li>
+            <li>✅ Used only for this session</li>
+            <li>✅ Encrypted in your browser</li>
+            <li>✅ Not logged or tracked</li>
+        </ul>
     </div>
     """, unsafe_allow_html=True)
 
-
-if uploaded_file:
-
-    with open("uploaded_resume.pdf", "wb") as f:
-        f.write(uploaded_file.getbuffer())
-    
-    if st.button("🚀 Analyze Resume", type="primary"):
-
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        
-        try:
-
-            status_text.text("📄 Extracting text from PDF...")
-            progress_bar.progress(25)
-            
-            resume_text, extraction_methods = extract_text_from_pdf("uploaded_resume.pdf")
-            st.session_state.resume_text = resume_text
-            
-            if st.session_state.debug_mode:
-                st.markdown("### 🔍 Debug: Text Extraction")
-                st.write(f"**Extraction methods used:** {', '.join(extraction_methods)}")
-                st.write(f"**Text length:** {len(resume_text)} characters")
-                st.text_area("Extracted Text (first 500 chars)", resume_text[:500], height=150)
-            
-            if not resume_text:
-                st.error("❌ Failed to extract text from PDF. Please ensure your PDF contains readable text.")
-                st.stop()
-            
-
-            status_text.text("🤖 Analyzing with AI...")
-            progress_bar.progress(50)
-            
-            analysis = analyze_resume_enhanced(resume_text, job_description)
-            
-
-            status_text.text("📊 Creating visualizations...")
-            progress_bar.progress(75)
-            time.sleep(0.5)
-            
-
-            status_text.text("✅ Analysis complete!")
-            progress_bar.progress(100)
-            time.sleep(0.5)
-            
-
-            progress_bar.empty()
-            status_text.empty()
-            
-
-            if "error" not in analysis:
-                st.session_state.analysis_complete = True
-                
-
-                st.session_state.analysis_history.append({
-                    'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    'score': analysis.get('overall_score', 0),
-                    'analysis': analysis
-                })
-                
-
-                st.markdown("## 📊 Analysis Results")
-                
-
-                col1, col2, col3, col4 = st.columns(4)
-                
-                with col1:
-                    st.markdown(f"""
-                    <div class="metric-card">
-                        <h3>{analysis.get('overall_score', 0)}/100</h3>
-                        <p>Overall Score</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                with col2:
-                    st.markdown(f"""
-                    <div class="metric-card">
-                        <h3>{analysis.get('ats_score', 0)}/100</h3>
-                        <p>ATS Score</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                with col3:
-                    st.markdown(f"""
-                    <div class="metric-card">
-                        <h3>{analysis.get('experience_level', 'Unknown')}</h3>
-                        <p>Experience Level</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                with col4:
-                    score = analysis.get('job_match_score', 0) if job_description else 0
-                    st.markdown(f"""
-                    <div class="metric-card">
-                        <h3>{score}/100</h3>
-                        <p>Job Match</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.markdown("""
-                    <div class="analysis-section">
-                        <h3>💪 Strengths</h3>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    for strength in analysis.get('strengths', []):
-                        st.write(f"✅ {strength}")
-                    
-                    st.markdown("""
-                    <div class="analysis-section">
-                        <h3>🎯 Skills Present</h3>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    skills_present = analysis.get('skills_present', [])
-                    if skills_present:
-                        skills_text = ", ".join(skills_present)
-                        st.write(skills_text)
-                        
-
-                        fig = create_skills_chart(skills_present)
-                        if fig:
-                            st.plotly_chart(fig, use_container_width=True)
-                
-                with col2:
-                    st.markdown("""
-                    <div class="analysis-section">
-                        <h3>🔧 Areas for Improvement</h3>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    for weakness in analysis.get('weaknesses', []):
-                        st.write(f"🔄 {weakness}")
-                    
-                    st.markdown("""
-                    <div class="analysis-section">
-                        <h3>📚 Recommended Skills</h3>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    for skill in analysis.get('skills_missing', []):
-                        st.write(f"➕ {skill}")
-                
-
-                st.markdown("## 📈 Score Breakdown")
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    fig1 = create_score_gauge(analysis.get('overall_score', 0), "Overall Score")
-                    st.plotly_chart(fig1, use_container_width=True)
-                
-                with col2:
-                    fig2 = create_score_gauge(analysis.get('ats_score', 0), "ATS Compatibility")
-                    st.plotly_chart(fig2, use_container_width=True)
-                
-
-                st.markdown("""
-                <div class="analysis-section">
-                    <h3>💡 Recommendations</h3>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                for rec in analysis.get('recommendations', []):
-                    st.write(f"🎯 {rec}")
-                
-
-                st.markdown("""
-                <div class="analysis-section">
-                    <h3>📚 Recommended Courses</h3>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                for course in analysis.get('recommended_courses', []):
-                    st.write(f"📖 {course}")
-                
-
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.markdown("""
-                    <div class="analysis-section">
-                        <h3>🏭 Industry Fit</h3>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    for industry in analysis.get('industry_fit', []):
-                        st.write(f"🏢 {industry}")
-                
-                with col2:
-                    st.markdown("""
-                    <div class="analysis-section">
-                        <h3>💰 Salary Estimate</h3>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    salary = analysis.get('salary_estimate', 'Not available')
-                    st.write(f"💵 {salary}")
-            
-            else:
-
-                st.error("❌ Analysis failed. Please see details below:")
-                
-                error_msg = analysis.get('error', 'Unknown error')
-                st.markdown(f"""
-                <div class="error-card">
-                    <h4>Error Details:</h4>
-                    <p>{error_msg}</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                if 'raw_text' in analysis:
-                    with st.expander("🔍 Raw AI Response"):
-                        st.text(analysis['raw_text'])
-                
-                if st.session_state.debug_mode and 'traceback' in analysis:
-                    with st.expander("🐛 Technical Details"):
-                        st.text(analysis['traceback'])
-        
-        except Exception as e:
-            st.error(f"❌ Unexpected error occurred: {str(e)}")
-            if st.session_state.debug_mode:
-                st.text(traceback.format_exc())
-
+st.markdown("---")
+st.markdown("""
+<div style="text-align: center; color: #666; padding: 2rem;">
+    <h4>🚀 AI Resume Analyzer Pro</h4>
+    <p>Powered by Google Gemini AI | Built with Streamlit</p>
+    <p><strong>Privacy Notice:</strong> Your resume data and API key are processed locally and never stored permanently.</p>
+</div>
+""", unsafe_allow_html=True)
